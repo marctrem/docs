@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -253,14 +254,14 @@ func (g Grammar) ExtractProduction(name string, descend, nosplit bool, match, ex
 		if len(prods) == 0 {
 			return nil, fmt.Errorf("couldn't find %s", n)
 		}
-		WalkToken(prods, func(t Token) {
+		WalkToken(map[uintptr]bool{}, prods, func(t Token) {
 			if !done[t] && descend {
 				names = append(names, t)
 				done[t] = true
 			}
 		})
 		fmt.Fprintf(b, "%s ::=\n", n)
-		b.WriteString(prods.Match(nosplit, match, exclude))
+		prods.Match(b, nosplit, match, exclude)
 	}
 	return b.Bytes(), nil
 }
@@ -340,15 +341,35 @@ func simplifySelfRefListProd(name string, s1, s2 Sequence) Productions {
 	}
 }
 
-func ReplaceToken(p Productions, f func(Token) Expression) {
-	replaceToken(p, f)
+type SeenExpression map[uintptr]bool
+
+func NewSeenExpression() SeenExpression {
+	return SeenExpression{}
 }
 
-func replaceToken(e Expression, f func(Token) Expression) Expression {
+func (s SeenExpression) Seen(e Expression) bool {
+	if v := reflect.ValueOf(e); v.Kind() == reflect.Slice {
+		p := v.Pointer()
+		if s[p] {
+			return true
+		}
+		s[p] = true
+	}
+	return false
+}
+
+func ReplaceToken(p Productions, f func(Token) Expression) {
+	replaceToken(NewSeenExpression(), p, f)
+}
+
+func replaceToken(seen SeenExpression, e Expression, f func(Token) Expression) Expression {
+	if seen.Seen(e) {
+		return nil
+	}
 	switch e := e.(type) {
 	case Sequence:
 		for i, v := range e {
-			n := replaceToken(v, f)
+			n := replaceToken(seen, v, f)
 			if n != nil {
 				e[i] = n
 			}
@@ -357,20 +378,20 @@ func replaceToken(e Expression, f func(Token) Expression) Expression {
 		return f(e)
 	case Group:
 		for i, v := range e {
-			n := replaceToken(v, f)
+			n := replaceToken(seen, v, f)
 			if n != nil {
 				e[i] = n
 			}
 		}
 	case Productions:
 		for i, v := range e {
-			n := replaceToken(v, f)
+			n := replaceToken(seen, v, f)
 			if n != nil {
 				e[i] = n
 			}
 		}
 	case Repeat:
-		return replaceToken(e.Expression, f)
+		return replaceToken(seen, e.Expression, f)
 	case Literal, Comment:
 		// ignore
 	default:
@@ -379,23 +400,26 @@ func replaceToken(e Expression, f func(Token) Expression) Expression {
 	return nil
 }
 
-func WalkToken(e Expression, f func(Token)) {
+func WalkToken(seen SeenExpression, e Expression, f func(Token)) {
+	if seen.Seen(e) {
+		return
+	}
 	switch e := e.(type) {
 	case Sequence:
 		for _, v := range e {
-			WalkToken(v, f)
+			WalkToken(seen, v, f)
 		}
 	case Token:
 		f(e)
 	case Group:
 		for _, v := range e {
-			WalkToken(v, f)
+			WalkToken(seen, v, f)
 		}
 	case Repeat:
-		WalkToken(e.Expression, f)
+		WalkToken(seen, e.Expression, f)
 	case Productions:
 		for _, v := range e {
-			WalkToken(v, f)
+			WalkToken(seen, v, f)
 		}
 	case Literal, Comment:
 		// ignore
@@ -406,8 +430,7 @@ func WalkToken(e Expression, f func(Token)) {
 
 type Productions []Expression
 
-func (p Productions) Match(nosplit bool, match, exclude []*regexp.Regexp) string {
-	b := new(bytes.Buffer)
+func (p Productions) Match(b *bytes.Buffer, nosplit bool, match, exclude []*regexp.Regexp) {
 	first := true
 	for _, e := range p {
 		if nosplit {
@@ -422,7 +445,7 @@ func (p Productions) Match(nosplit bool, match, exclude []*regexp.Regexp) string
 			continue
 		}
 	Loop:
-		for _, s := range split(e) {
+		for _, s := range split(map[uintptr]bool{}, e) {
 			for _, ex := range exclude {
 				if ex.MatchString(s) {
 					continue Loop
@@ -443,7 +466,6 @@ func (p Productions) Match(nosplit bool, match, exclude []*regexp.Regexp) string
 			b.WriteString("\n")
 		}
 	}
-	return b.String()
 }
 
 func (p Productions) String() string {
@@ -460,12 +482,14 @@ func (p Productions) String() string {
 }
 
 type Expression interface {
-	String() string
+	String(seen SeenExpression) string
 }
 
 type Sequence []Expression
 
-func (s Sequence) String() string {
+func (s Sequence) String(seen SeenExpression) string {
+	if (seen.Seen(s) {
+		return 
 	b := new(bytes.Buffer)
 	for i, e := range s {
 		if i > 0 {
@@ -478,19 +502,19 @@ func (s Sequence) String() string {
 
 type Token string
 
-func (t Token) String() string {
+func (t Token) String(seen SeenExpression) string {
 	return string(t)
 }
 
 type Literal string
 
-func (l Literal) String() string {
+func (l Literal) String(seen SeenExpression) string {
 	return fmt.Sprintf("'%s'", string(l))
 }
 
 type Group []Expression
 
-func (g Group) String() string {
+func (g Group) String(seen SeenExpression) string {
 	b := new(bytes.Buffer)
 	b.WriteString("( ")
 	for i, e := range g {
@@ -507,17 +531,20 @@ type Repeat struct {
 	Expression
 }
 
-func (r Repeat) String() string {
+func (r Repeat) String(seen SeenExpression) string {
 	return fmt.Sprintf("( %s )*", r.Expression)
 }
 
 type Comment string
 
-func (c Comment) String() string {
+func (c Comment) String(seen SeenExpression) string {
 	return string(c)
 }
 
-func split(e Expression) []string {
+func split(seen SeenExpression, e Expression) []string {
+	if seen.Seen(e) {
+		return nil
+	}
 	appendRet := func(cur, add []string) []string {
 		if len(cur) == 0 {
 			if len(add) == 0 {
@@ -537,12 +564,12 @@ func split(e Expression) []string {
 	switch e := e.(type) {
 	case Sequence:
 		for _, v := range e {
-			ret = appendRet(ret, split(v))
+			ret = appendRet(ret, split(seen, v))
 		}
 	case Group:
 		var next []string
 		for _, v := range e {
-			next = append(next, appendRet(ret, split(v))...)
+			next = append(next, appendRet(ret, split(seen, v))...)
 		}
 		ret = next
 	case Literal, Comment, Repeat, Token:

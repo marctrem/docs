@@ -345,6 +345,17 @@ func main() {
 				},
 				{name: "update_stmt", inline: []string{"relation_expr_opt_alias", "set_clause_list", "set_clause", "single_set_clause", "multiple_set_clause", "ctext_row", "ctext_expr_list", "ctext_expr", "from_clause", "from_list", "where_clause", "returning_clause"}},
 				{name: "upsert_stmt", stmt: "insert_stmt", inline: []string{"insert_target", "insert_rest", "returning_clause"}, match: []*regexp.Regexp{regexp.MustCompile("'UPSERT'")}},
+				{
+					name: "default_column_level",
+					stmt: "create_table_stmt",
+					inline: []string{
+						"opt_table_elem_list",
+						"table_elem_list",
+						"table_elem",
+						"column_def",
+						"col_qual_list",
+					},
+				},
 			}
 
 			for _, s := range specs {
