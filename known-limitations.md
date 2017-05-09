@@ -1,10 +1,10 @@
 ---
-title: v1.0 Known Limitations
+title: Known Limitations
 summary:
 toc: false
 ---
 
-This page describes limitations we've identified in the v1.0 release and plan to investigate and possibly resolve in a future release.
+This page describes limitations we've identified in the [CockroachDB 1.0](v1.0.html) release and plan to investigate and possibly resolve in future releases.
 
 <div id="toc"></div>
 
@@ -28,7 +28,7 @@ Within a single [transaction](transactions.html):
 
 ## Nodes need access to the first key-value range on startup
 
-As show in our [deployment tutorials](manual-deployment.html), when starting the first node of a cluster, the `--join` flag should be empty, but when starting all subsequent nodes, `--join` should be set to the address of node 1. This approach ensures that all nodes have access to a copy of the first key-value range, which is part of a meta-index identifying where all range replicas are stored, and which nodes requires to initialize themselves and start accepting incoming connections.
+As shown in our [deployment tutorials](manual-deployment.html), when starting the first node of a cluster, the `--join` flag should be empty, but when starting all subsequent nodes, `--join` should be set to the address of node 1. This approach ensures that all nodes have access to a copy of the first key-value range, which is part of a meta-index identifying where all range replicas are stored, and which nodes requires to initialize themselves and start accepting incoming connections.
 
 For the same reason, when restarting a node (even node 1), the `--join` flag should be set to the address of node 1.
 
@@ -101,7 +101,7 @@ Queries with constant expressions that evaluate to 2**-63 may be incorrectly rej
 pq: ($0, $0) < (1, - 9223372036854775808:::INT): tuples ($0, $0), (1, - 9223372036854775808:::INT) are not comparable at index 2: numeric constant out of int64 range
 ~~~
 
-## Overload resolutation for collated strings
+## Overload resolution for collated strings
 
 Many string operations are not properly overloaded for collated strings, for example:
 
