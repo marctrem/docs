@@ -15,7 +15,7 @@ When you create an index, CockroachDB "indexes" the columns you specify, which c
 
 After a column is indexed, SQL can easily filter its values using the index instead of scanning each row one-by-one. On large tables, this greatly reduces the number of rows SQL has to use, executing queries exponentially faster.
 
-For example, if you index an `INT` column and then filter it <code>WHERE &lt;indexed column&gt; = 10</code>, SQL can use the index to find values starting at 10 but less than 11. In contrast, without an index, SQL would have to evaluate _every_ row in the column for values equaling 10.
+For example, if you index an `INT` column and then filter it <code>WHERE &lt;indexed column&gt; = 10</code>, SQL can use the index to find values starting at 10 but less than 11. In contrast, without an index, database would have to evaluate _every_ row in the table for cells equaling 10. This is known as [full table scan](https://en.wikipedia.org/wiki/Full_table_scan).
 
 ### Creation
 
